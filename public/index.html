@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des Articles</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      background-color: #f9fafb;
+      color: #1f2937;
+    }
+    section {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+    h1, h2 { margin-top: 0; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; margin-bottom: 0.4rem; }
+    input, textarea {
+      width: 100%;
+      padding: 0.6rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background-color: #1d4ed8; }
+    .article-card {
+      border-left: 4px solid #2563eb;
+      background: #f3f4f6;
+      padding: 1rem;
+      margin-top: 1rem;
+      border-radius: 0 4px 4px 0;
+    }
+    .article-meta { font-size: 0.85rem; color: #6b7280; }
+    .error { color: #dc2626; font-weight: 600; margin-top: 0.5rem; }
+    .success { color: #16a34a; font-weight: 600; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+
+  <h1>Gestion des Articles</h1>
+
+  <!-- 1. CRÉER UN ARTICLE -->
+  <section>
+    <h2>Créer un article</h2>
+    <form id="create-form">
+      <div class="form-group">
+        <label for="title">Titre (min. 5 caractères)</label>
+        <input type="text" id="title" required placeholder="Ex: Mon super article">
+      </div>
+      <div class="form-group">
+        <label for="content">Contenu (min. 10 caractères)</label>
+        <textarea id="content" rows="3" required placeholder="Écrivez votre contenu ici..."></textarea>
+      </div>
+      <button type="submit">Publier l'article</button>
+      <div id="create-feedback"></div>
+    </form>
+  </section>
+
+  <!-- 2. TROUVER UN ARTICLE PAR ID -->
+  <section>
+    <h2>Rechercher un article</h2>
+    <form id="search-form" style="display: flex; gap: 0.5rem;">
+      <input type="number" id="search-id" required placeholder="ID de l'article (ex: 1)">
+      <button type="submit">Chercher</button>
+    </form>
+    <div id="single-article-result"></div>
+  </section>
+
+  <!-- 3. LISTER TOUS LES ARTICLES -->
+  <section>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h2>Liste des articles</h2>
+      <button id="refresh-btn" type="button">Actualiser</button>
+    </div>
+    <div id="articles-list">Chargement...</div>
+  </section>
+
+  <script>
+    // ⚠️ Adaptez cette URL selon le port et le préfixe de votre serveur Node.js
+    const API_URL = '/api/articles';
+
+
+    // Utilitaire pour éviter les failles XSS lors de l'affichage
+    function escapeHTML(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Génère le HTML d'un article
+    function renderArticleCard(article) {
+  return `
+    <div class="article-card" id="article-${article.id}">
+      <div class="article-meta">ID : ${article.id}</div>
+      <h3>${escapeHTML(article.title)}</h3>
+      <p>${escapeHTML(article.content)}</p>
+      <button type="button" class="btn-delete" onclick="deleteArticle(${article.id})">Supprimer</button>
+    </div>
+  `;
+  }
+    // 4. SUPPRIMER UN ARTICLE
+async function deleteArticle(id) {
+  if (!confirm(`Voulez-vous vraiment supprimer l'article #${id} ?`)) return;
+
+  try {
+    const res = await fetch(`${API_URL}/${id}`, {
+      method: 'DELETE'
+    });
+
+    if (res.status === 404) throw new Error('Article introuvable');
+    if (!res.ok) throw new Error('Erreur lors de la suppression');
+
+    // Rafraîchit la liste globale
+    loadArticles();
+    
+    // Vide le résultat de recherche si l'article supprimé y était affiché
+    const singleResult = document.getElementById('single-article-result');
+    if (singleResult.querySelector(`#article-${id}`)) {
+      singleResult.innerHTML = '';
+    }
+  } catch (err) {
+    alert(`Erreur : ${err.message}`);
+  }
+  }
+
+    // 1. CHARGER TOUS LES ARTICLES
+    async function loadArticles() {
+      const listContainer = document.getElementById('articles-list');
+      try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error('Erreur lors de la récupération');
+        
+        const articles = await res.json();
+        if (articles.length === 0) {
+          listContainer.innerHTML = '<p>Aucun article disponible.</p>';
+          return;
+        }
+        listContainer.innerHTML = articles.map(renderArticleCard).join('');
+      } catch (err) {
+        listContainer.innerHTML = `<p class="error">Impossible de charger les articles (${err.message})</p>`;
+      }
+    }
+
+    // 2. CRÉER UN ARTICLE
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('title').value;
+      const content = document.getElementById('content').value;
+      const feedback = document.getElementById('create-feedback');
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, content })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.message || 'Données invalides');
+
+        feedback.innerHTML = '<p class="success">Article créé avec succès !</p>';
+        e.target.reset();
+        loadArticles(); // Rafraîchit la liste automatiquement
+      } catch (err) {
+        feedback.innerHTML = `<p class="error">Erreur : ${err.message}</p>`;
+      }
+    });
+
+    // 3. TROUVER UN ARTICLE PAR ID
+    document.getElementById('search-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('search-id').value;
+      const resultContainer = document.getElementById('single-article-result');
+
+      try {
+        const res = await fetch(`${API_URL}/${id}`);
+        if (res.status === 404) throw new Error('Article introuvable');
+        if (!res.ok) throw new Error('Erreur serveur');
+
+        const article = await res.json();
+        resultContainer.innerHTML = renderArticleCard(article);
+      } catch (err) {
+        resultContainer.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    });
+
+    // Bouton d'actualisation et chargement initial
+    document.getElementById('refresh-btn').addEventListener('click', loadArticles);
+    loadArticles();
+  </script>
+</body>
+</html>
