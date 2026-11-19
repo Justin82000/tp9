@@ -8,18 +8,23 @@ export const ArticleController = {
   },
 
   getOne: async (req: Request, res: Response): Promise<void> => {
-    try {
-      const id = req.params.id;
-      if (typeof id !== 'string') {
-        res.status(404).json({ error: 'Article introuvable' });
-        return;
-      }
-      const article = await ArticleService.getArticleById(id);
-      res.json(article);
-    } catch (error) {
-      res.status(404).json({ error: 'Article introuvable' });
+  try {
+    const id = String(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: 'Identifiant manquant' });
+      return;
     }
-  },
+    const article = await ArticleService.getArticleById(id);
+    if (!article) {
+      res.status(404).json({ error: 'Article introuvable' });
+      return;
+    }
+    res.json(article);
+  } catch (error) {
+    res.status(404).json({ error: 'Article introuvable' });
+  }
+},
+
 
   create: async (req: Request, res: Response): Promise<void> => {
     try {
